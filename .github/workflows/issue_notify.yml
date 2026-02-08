@@ -13,14 +13,15 @@ jobs:
         uses: SimonScholz/google-chat-action@main
         with:
           webhookUrl: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-          # カード形式ではなく、シンプルなテキストモードに切り替えます
           createDefaultSection: false
-          # message ではなく、もっと自由度の高い subtitle を本文として使います
           title: "📋 Issue更新: ${{ github.event.issue.title }}"
+          # subtitle内での改行を確実にするため、空行を挟んでいます
           subtitle: |
-            実行者: ${{ github.actor }} (${{ github.event.action }})
-            
-            【内容】
+            👤 **実行者**
+            ${{ github.actor }} (${{ github.event.action }})
+
+            📝 **内容**
             ${{ github.event.issue.body || github.event.comment.body }}
-            
-            URL: ${{ github.event.issue.html_url }}
+
+            🔗 **URL**
+            ${{ github.event.issue.html_url }}
