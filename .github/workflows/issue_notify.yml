@@ -10,10 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Google Chat Notification
+        # 確実に動くよう、最新版(@main)を指定します
         uses: SimonScholz/google-chat-action@main
         with:
           webhookUrl: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-          # 本文を含めるように message をカスタマイズ
+          # 本文(body)が表示されるようにメッセージを構成
           message: |
             📋 **Issue更新通知**
             ----------------------------------------
@@ -21,7 +22,7 @@ jobs:
             **タイトル:** ${{ github.event.issue.title }}
             **実行者:** ${{ github.actor }}
             
-            **内容:**
+            **【内容】**
             ${{ github.event.issue.body || github.event.comment.body }}
             
             **URL:** ${{ github.event.issue.html_url }}
