@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Google Chat Notification
-        uses: funnyzak/google-chat-notification@1.1.0
+        uses: akira-k0/google-chat-notification@1.1.0
         with:
           url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
           title: '📋 Issueが更新されました'
