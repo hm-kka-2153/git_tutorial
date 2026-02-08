@@ -1,8 +1,28 @@
-name: Google Chat Notify
+name: Google Auth Test
 on:
+  push: # ファイルを保存（コミット）した瞬間に動くようにします
   issues:
-    types: [opened, edited] # 作成と編集の両方に反応
+    types: [opened]
 
 jobs:
-  notify:
+  check-auth:
     runs-on: ubuntu-latest
+    steps:
+      # 1. Google Cloud 認証
+      - name: Auth Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
+
+      # 2. トークンが発行できるかテスト
+      - name: Check Access Token
+        run: |
+          TOKEN=$(gcloud auth print-access-token)
+          if [ -n "$TOKEN" ]; then
+            echo "✅ 認証成功！トークンが発行されました。"
+            # セキュリティ上、トークンの全文字は表示されませんが、
+            # 履歴で「Success」になればOKです
+          else
+            echo "❌ 認証失敗：トークンが空です。"
+            exit 1
+          fi
