@@ -1,7 +1,7 @@
 name: Issue Notification
 on:
   issues:
-    types: [opened, edited, closed, reopened]
+    types: [opened, edited]
   issue_comment:
     types: [created]
 
@@ -10,10 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Google Chat Notification
-        # ツールを使わず、直接Google ChatのWebhookを叩くもっともシンプルな方法に変えます
         run: |
+          # コメントがある場合はコメント本文、ない場合はIssue本文を選択
+          CONTENT="${{ github.event.comment.body || github.event.issue.body }}"
+          
+          # JSONのエラーを防ぐため、改行コードなどをエスケープ処理
+          # (この1行を入れることで、複雑な本文でもエラーになりにくくなります)
+          SAFE_CONTENT=$(echo "$CONTENT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
+
           curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}" \
           -H "Content-Type: application/json; charset=UTF-8" \
-          -d '{
-            "text": "📋 *Issue更新: ${{ github.event.issue.title }}*\n\n👤 *実行者*: ${{ github.actor }} (${{ github.event.action }})\n\n📝 *内容*:\n${{ github.event.issue.body || github.event.comment.body }}\n\n🔗 *URL*: ${{ github.event.issue.html_url }}"
-          }'
+          -d "{
+            \"text\": \"📋 *Issue更新: ${{ github.event.issue.title }}*\n\n👤 *実行者*: ${{ github.actor }} (${{ github.event.action }})\n\n📝 *内容*:\n${SAFE_CONTENT:1:-1}\n\n🔗 *URL*: ${{ github.event.comment.html_url || github.event.issue.html_url }}\"
+          }"
