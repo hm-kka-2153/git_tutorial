@@ -1,28 +1,44 @@
-name: Google Auth Test
+name: Google Chat Notify
 on:
-  push: # ファイルを保存（コミット）した瞬間に動くようにします
   issues:
-    types: [opened]
+    types: [opened, edited] # 作成と更新の両方
 
 jobs:
-  check-auth:
+  notify:
     runs-on: ubuntu-latest
     steps:
-      # 1. Google Cloud 認証
+      # 1. Google Cloud 認証（成功確認済み）
       - name: Auth Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
 
-      # 2. トークンが発行できるかテスト
-      - name: Check Access Token
+      # 2. Issueの内容を解析して返信
+      - name: Send Message to Thread
         run: |
-          TOKEN=$(gcloud auth print-access-token)
-          if [ -n "$TOKEN" ]; then
-            echo "✅ 認証成功！トークンが発行されました。"
-            # セキュリティ上、トークンの全文字は表示されませんが、
-            # 履歴で「Success」になればOKです
-          else
-            echo "❌ 認証失敗：トークンが空です。"
-            exit 1
+          # 1. 必要な情報の取得
+          ISSUE_BODY="${{ github.event.issue.body }}"
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          ISSUE_URL="${{ github.event.issue.html_url }}"
+          ACTION="${{ github.event.action }}"
+
+          # 2. 本文から Thread ID を抽出
+          THREAD_ID=$(echo "$ISSUE_BODY" | grep -oP 'Thread ID:\s*\K(spaces/[A-Za-z0-9_-]+/threads/[A-Za-z0-9_-]+)')
+
+          if [ -z "$THREAD_ID" ]; then
+            echo "❌ 本文に Thread ID が見つかりません。通知をスキップします。"
+            exit 0
           fi
+
+          # 3. スペースIDを切り出し (spaces/XXXXX)
+          SPACE_ID=$(echo "$THREAD_ID" | cut -d'/' -f1,2)
+
+          # 4. Google Chat API へ POST
+          curl -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            "https://chat.googleapis.com/v1/$SPACE_ID/messages?messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD" \
+            -d "{
+              \"text\": \"🔄 **GitHub Issue $ACTION**\nタイトル: $ISSUE_TITLE\nURL: $ISSUE_URL\",
+              \"thread\": { \"name\": \"$THREAD_ID\" }
+            }"
