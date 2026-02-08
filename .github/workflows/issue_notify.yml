@@ -12,7 +12,6 @@ jobs:
       - name: Send Google Chat Notification
         run: |
           # 1. Issueの本文からThread IDを抽出
-          # grepで spaces/.../threads/... の部分だけを正確に抜き出します
           THREAD_ID=$(echo "${{ github.event.issue.body }}" | grep -o 'spaces/[^ ]*/threads/[^ ]*' | head -1)
 
           # 2. 通知内容の準備
@@ -20,10 +19,10 @@ jobs:
           SAFE_CONTENT=$(echo "$CONTENT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
 
           # 3. Google ChatへPOST送信
-          # 成功の鍵: URLには何も付けず、JSONの中で "threadKey" として渡します
-          curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}" \
+          # 【最終解決策】URLに直接 threadKey を追加します。
+          # これにより、Google Chat側で強制的に同じスレッドとして認識させます。
+          curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}&threadKey=${THREAD_ID}&message_reply_option=REPLY_MESSAGE_FALLBACK" \
           -H "Content-Type: application/json; charset=UTF-8" \
           -d "{
-            \"text\": \"📋 *Issue更新: ${{ github.event.issue.title }}*\n\n👤 *実行者*: ${{ github.actor }} (${{ github.event.action }})\n\n📝 *内容*:\n${SAFE_CONTENT:1:-1}\n\n🔗 *URL*: ${{ github.event.comment.html_url || github.event.issue.html_url }}\",
-            \"thread\": { \"threadKey\": \"$THREAD_ID\" }
+            \"text\": \"📋 *Issue更新: ${{ github.event.issue.title }}*\n\n👤 *実行者*: ${{ github.actor }}\n📝 *内容*:\n${SAFE_CONTENT:1:-1}\n\n🔗 *URL*: ${{ github.event.comment.html_url || github.event.issue.html_url }}\"
           }"
