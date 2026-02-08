@@ -14,24 +14,30 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 1. データの取得
+          # 1. データの安全な取得（環境変数経由で渡すのが定石です）
+          RAW_BODY=$(cat << 'EOF'
+          ${{ github.event.issue.body || github.event.comment.body }}
+          EOF
+          )
+          ISSUE_TITLE=$(cat << 'EOF'
+          ${{ github.event.issue.title }}
+          EOF
+          )
+          
           ISSUE_NUMBER="${{ github.event.issue.number }}"
-          ISSUE_TITLE="${{ github.event.issue.title }}"
           ACTOR="${{ github.actor }}"
           
-          # 本文(body)の取得
-          RAW_BODY="${{ github.event.issue.body }}"
-
-          # 【抽出】本文から「投稿者:」の後の名前を抽出
+          # 【抽出】「投稿者:」の行から名前を抜き出す
           EXTRACTED_SENDER=$(echo "$RAW_BODY" | grep "投稿者:" | head -n 1 | sed 's/.*投稿者[:：]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/\*\*//g')
 
-          # 抽出できなかった場合のフォールバック
+          # 名前が見つからない場合はGitHubユーザー名を表示
           if [ -z "$EXTRACTED_SENDER" ]; then
             SENDER="${{ github.event.sender.login }}"
           else
             SENDER="$EXTRACTED_SENDER"
           fi
           
+          # 日本語ステータスの決定
           case "${{ github.event.action }}" in
             "opened")   ACTION_JP="新規課題が登録されました" ;;
             "edited")   ACTION_JP="課題が更新されました" ;;
@@ -41,54 +47,48 @@ jobs:
             *)          ACTION_JP="${{ github.event.action }}" ;;
           esac
 
+          # アイコンとヘッダーの設定
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
             HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
-            CONTENT="${{ github.event.comment.body }}"
-            URL="${{ github.event.comment.html_url }}"
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
+            URL="${{ github.event.comment.html_url }}"
           else
             HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
-            CONTENT="$RAW_BODY"
-            URL="${{ github.event.issue.html_url }}"
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
+            URL="${{ github.event.issue.html_url }}"
           fi
 
-          # 2. 本文の整形
-          # 【修正箇所】 grep -v "投稿者:" を追加し、本文からその行を除外します
-          SUMMARY=$(echo "$CONTENT" | grep -v "投稿者:" | head -n 5 | jq -aRs . | sed 's/^"//;s/"$//')
+          # 2. 本文の整形（投稿者行を除外し、JSON用に安全にエンコード）
+          # jq の --arg を使うことで、特殊文字によるJSON破綻を完全に防ぎます
+          SUMMARY=$(echo "$RAW_BODY" | grep -v "投稿者:" | head -n 10)
 
-          # 3. JSONデータの構築
-          JSON_DATA=$(cat <<EOF
-          {
-            "cardsV2": [{
-              "cardId": "issue-card",
-              "card": {
-                "header": {
-                  "title": "$HEADER_TITLE",
-                  "subtitle": "投稿者: $SENDER / 実行者: $ACTOR",
-                  "imageUrl": "$ICON",
-                  "imageType": "CIRCLE"
-                },
-                "sections": [{
-                  "widgets": [
-                    { "textParagraph": { "text": "<b>タイトル:</b><br>$ISSUE_TITLE" } },
-                    { "textParagraph": { "text": "<b>内容:</b><br>$SUMMARY" } },
-                    {
-                      "buttonList": {
-                        "buttons": [{
-                          "text": "GitHubで詳細を見る",
-                          "onClick": { "openLink": { "url": "$URL" } }
-                        }]
-                      }
-                    }
-                  ]
-                }]
-              }
-            }],
-            "thread": { "threadKey": "issue-$ISSUE_NUMBER" }
-          }
-          EOF
-          )
+          # 3. JSONの組み立て（jqを使用して構築するのが最も確実です）
+          JSON_DATA=$(jq -n \
+            --arg title "$ISSUE_TITLE" \
+            --arg header "$HEADER_TITLE" \
+            --arg subtitle "投稿者: $SENDER / 実行者: $ACTOR" \
+            --arg icon "$ICON" \
+            --arg summary "$SUMMARY" \
+            --arg url "$URL" \
+            --arg tkey "issue-$ISSUE_NUMBER" \
+            '{
+              cardsV2: [{
+                cardId: "issue-card",
+                card: {
+                  header: { title: $header, subtitle: $subtitle, imageUrl: $icon, imageType: "CIRCLE" },
+                  sections: [{
+                    widgets: [
+                      { textParagraph: { text: ("<b>タイトル:</b><br>" + $title) } },
+                      { textParagraph: { text: ("<b>内容:</b><br>" + $summary) } },
+                      { buttonList: { buttons: [{ text: "GitHubで詳細を見る", onClick: { openLink: { url: $url } } }] } }
+                    ]
+                  }]
+                }
+              }],
+              thread: { threadKey: $tkey }
+            }')
 
-          # 4. 送信
-          curl -s -X POST -H 'Content-Type: application/json
+          # 4. 送信（エラー時に内容を確認できるよう -v を付与）
+          curl -v -X POST -H 'Content-Type: application/json' \
+          -d "$JSON_DATA" \
+          "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
