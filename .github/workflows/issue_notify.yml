@@ -2,33 +2,38 @@ name: Google Chat Threaded Notification
 
 on:
   issues:
+    # opened: 新規作成, edited: タイトルや本文の編集
     types: [opened, edited, reopened]
+  issue_comment:
+    # コメントが作成された時
+    types: [created]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Notification with threadKey
+      - name: Send Notification
         env:
-          # Webhook URLはGitHubのSecretsに登録して使用してください
+          # 必ず Settings > Secrets > Actions に GOOGLE_CHAT_WEBHOOK を登録してください
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 1. URLにスレッド返信用のオプションを付与
-          # 2. threadKeyとしてIssue番号を指定（これでIssueごとにスレッドが固定されます）
-          # 3. messageReplyOptionを指定することで、初回は新規、2回目以降は返信になります
-          
-          FINAL_URL="${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
-          
-          JSON_DATA=$(cat <<EOF
-          {
-            "text": "📋 *Issue通知*\n**タイトル:** ${{ github.event.issue.title }}\n**ステータス:** ${{ github.event.action }}\n**URL:** ${{ github.event.issue.html_url }}",
-            "thread": {
-              "threadKey": "issue-${{ github.event.issue.number }}"
-            }
-          }
-          EOF
-          )
+          # 1. threadKeyの決定 (Issue番号をベースにする)
+          # issue_commentイベントの場合は github.event.issue.number を参照
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          THREAD_KEY="issue-${ISSUE_NUMBER}"
 
+          # 2. メッセージ本文の作成
+          # Issue作成/編集か、コメント投稿かで文言を変える例
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            TEXT="💬 *Issueにコメントが追加されました*\n**Issue:** #${ISSUE_NUMBER} ${{ github.event.issue.title }}\n**コメント:** ${{ github.event.comment.body }}\n**URL:** ${{ github.event.comment.html_url }}"
+          else
+            TEXT="📋 *Issueが更新されました (${{ github.event.action }})*\n**タイトル:** ${{ github.event.issue.title }}\n**URL:** ${{ github.event.issue.html_url }}"
+          fi
+
+          # 3. 送信 (URLパラメータを引用符で囲むのがコツ)
           curl -X POST -H 'Content-Type: application/json' \
-          -d "$JSON_DATA" \
-          "$FINAL_URL"
+          -d "{
+            \"text\": \"$TEXT\",
+            \"thread\": { \"threadKey\": \"$THREAD_KEY\" }
+          }" \
+          "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
