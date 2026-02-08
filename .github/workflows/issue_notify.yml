@@ -1,15 +1,49 @@
 name: Google Chat Notify
+
 on:
   issues:
-    types: [opened, edited] # 作成と更新の両方
+    types: [opened, edited]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      # 1. Google Cloud 認証（成功確認済み）
+      # 1. Google Cloud 認証 (secrets.GOOGLE_CHAT_CREDENTIALS を使用)
       - name: Auth Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
 
+      # 2. Issue情報を取得し、Thread IDを解析してChatへ送信
+      - name: Send Message to Thread
+        env:
+          # 特殊文字によるシェルエラーを防ぐため、env経由で変数化します
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          # 本文から Thread ID (spaces/.../threads/...) を抽出
+          # grep -o でマッチした部分のみを抜き出します
+          THREAD_ID=$(echo "$ISSUE_BODY" | grep -o 'spaces/[A-Za-z0-9_-]*/threads/[A-Za-z0-9_-]*' | head -n 1)
+
+          if [ -z "$THREAD_ID" ]; then
+            echo "⚠️ Thread ID not found in issue body. Notification skipped."
+            exit 0
+          fi
+
+          echo "✅ Target Thread Found: $THREAD_ID"
+
+          # Thread IDからSpace IDの部分だけを抽出 (spaces/XXXXXX)
+          SPACE_ID=$(echo "$THREAD_ID" | cut -d'/' -f1,2)
+
+          # Google Chat API 実行
+          # messageReplyOption を指定することで、既存のスレッドへ確実に返信します
+          curl -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            "https://chat.googleapis.com/v1/$SPACE_ID/messages?messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD" \
+            -d "{
+              \"text\": \"🔄 **GitHub Issue $ACTION**\nタイトル: $ISSUE_TITLE\nURL: $ISSUE_URL\",
+              \"thread\": { \"name\": \"$THREAD_ID\" }
+            }"
