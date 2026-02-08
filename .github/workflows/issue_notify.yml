@@ -1,31 +1,28 @@
 name: Google Chat Notification
 
 on:
-  # Issueの作成・更新時、およびメインブランチへのPush時に実行
   issues:
     types: [opened, edited, reopened]
-  push:
-    branches: [ "main" ]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Google Chat Notification
-        uses: akira-k0/google-chat-notification@v1.1.0
-        with:
-          # GitHubのSettings > Secrets > Actions に登録した名前
-          url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-          
-          # 通知のタイトル
-          title: '📋 GitHubリポジトリが更新されました'
-          
-          # 通知のメインコンテンツ（Markdownが一部使えます）
-          content: |
-            **イベント:** ${{ github.event_name }}
-            **実行者:** ${{ github.actor }}
-            **リポジトリ:** ${{ github.repository }}
-            **詳細URL:** ${{ github.event.issue.html_url || github.event.compare }}
-          
-          # ジョブの成否に応じて色を変える設定
-          status: ${{ job.status }}
+      - name: Send Notification via curl
+        env:
+          # GitHubのSettings > Secrets > Actions に登録したURL
+          WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+        run: |
+          # メッセージ本文を構築
+          # ※ヒアドキュメント(EOF)を使うことで、改行や変数を安全に扱えます
+          JSON_DATA=$(cat <<EOF
+          {
+            "text": "📋 *Issueが更新されました*\n\n**アクション:** ${{ github.event.action }}\n**タイトル:** ${{ github.event.issue.title }}\n**実行者:** ${{ github.actor }}\n**URL:** ${{ github.event.issue.html_url }}"
+          }
+          EOF
+          )
+
+          # Google Chatへ送信
+          curl -X POST -H 'Content-Type: application/json' \
+          -d "$JSON_DATA" \
+          "$WEBHOOK_URL"
