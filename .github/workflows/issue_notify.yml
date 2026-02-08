@@ -18,6 +18,7 @@ jobs:
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           ISSUE_TITLE="${{ github.event.issue.title }}"
           ACTOR="${{ github.actor }}"
+          # 投稿者の名前（森本様など）を表示するために sender.login を取得
           SENDER="${{ github.event.sender.login }}"
           
           case "${{ github.event.action }}" in
@@ -34,11 +35,6 @@ jobs:
             CONTENT="${{ github.event.comment.body }}"
             URL="${{ github.event.comment.html_url }}"
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
-          elif [ "${{ github.event.action }}" = "closed" ]; then
-            HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
-            CONTENT="${{ github.event.issue.body }}"
-            URL="${{ github.event.issue.html_url }}"
-            ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/check_circle/default/48px.svg"
           else
             HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
             CONTENT="${{ github.event.issue.body }}"
@@ -46,12 +42,12 @@ jobs:
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
           fi
 
-          # 2. 本文の整形
+          # 2. 本文の整形（jqを使って安全にエスケープ）
           SUMMARY=$(echo "$CONTENT" | head -n 5 | jq -aRs . | sed 's/^"//;s/"$//')
 
           # 3. JSONデータの構築
-          # 【重要】"text" フィールドを絶対に含めないようにします。
-          # これにより、システム用の threadKey は裏側だけで使われ、画面には出なくなります。
+          # 【重要】 "text" フィールドを削除し、純粋に cardsV2 だけを送信します。
+          # これにより "**threadKey:**" などの余計なテキスト表示を根絶します。
           JSON_DATA=$(cat <<EOF
           {
             "cardsV2": [{
@@ -84,7 +80,7 @@ jobs:
           EOF
           )
 
-          # 4. 送信 (URLパラメータに余計なものが混ざらないよう注意)
+          # 4. 送信
           curl -s -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
