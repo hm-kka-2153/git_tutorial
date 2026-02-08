@@ -2,7 +2,6 @@ name: Google Chat Japanese Card Notification
 
 on:
   issues:
-    # closed を追加しました
     types: [opened, edited, reopened, closed]
   issue_comment:
     types: [created]
@@ -20,7 +19,6 @@ jobs:
           ISSUE_TITLE="${{ github.event.issue.title }}"
           SENDER="${{ github.actor }}"
           
-          # アクション名の日本語変換（クローズを追加）
           case "${{ github.event.action }}" in
             "opened")   ACTION_JP="新規課題が登録されました" ;;
             "edited")   ACTION_JP="課題が更新されました" ;;
@@ -30,7 +28,6 @@ jobs:
             *)          ACTION_JP="${{ github.event.action }}" ;;
           esac
 
-          # イベントごとのアイコン設定（クローズ時はチェックマークに変更）
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
             HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
             CONTENT="${{ github.event.comment.body }}"
@@ -48,10 +45,12 @@ jobs:
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
           fi
 
-          # 2. 本文の整形（jqで安全にエスケープ）
-          SUMMARY=$(echo "$CONTENT" | head -n 5 | jq -aRs .)
+          # 2. 本文の整形（重要：jqの出力を文字列として安全に扱う）
+          # sed で外側のダブルクォートを削除しています
+          SUMMARY=$(echo "$CONTENT" | head -n 5 | jq -aRs . | sed 's/^"//;s/"$//')
 
           # 3. JSONデータの作成
+          # $SUMMARY の周りに直接ダブルクォートを配置します
           JSON_DATA=$(cat <<EOF
           {
             "cardsV2": [{
@@ -85,6 +84,7 @@ jobs:
           )
 
           # 4. WebhookへPOST送信
-          curl -X POST -H 'Content-Type: application/json' \
+          # 結果をコンソールに出力してデバッグしやすくします
+          curl -v -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
