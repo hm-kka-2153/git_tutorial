@@ -12,20 +12,3 @@ jobs:
         with:
           credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
 
-      - name: Send Message
-        run: |
-          # スペースIDはご自身のものに書き換えてください
-          SPACE_ID="spaces/AAQASOkPwoA"
-          
-          # GitHub Actionsが自動で持っている変数を利用
-          ISSUE_TITLE="${{ github.event.issue.title }}"
-          ISSUE_URL="${{ github.event.issue.html_url }}"
-          ACTION="${{ github.event.action }}" # opened か edited が入る
-
-          curl -X POST \
-            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-            -H "Content-Type: application/json" \
-            "https://chat.googleapis.com/v1/$SPACE_ID/messages" \
-            -d "{
-              \"text\": \"📢 **Issue ${{ github.event.action }}**\nタイトル: $ISSUE_TITLE\nURL: $ISSUE_URL\"
-            }"
