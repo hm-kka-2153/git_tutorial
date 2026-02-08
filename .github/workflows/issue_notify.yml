@@ -1,45 +1,28 @@
-name: Debug Step 1 - Auth and Extraction
+name: Google Auth Test
 on:
+  push: # ファイルを保存（コミット）した瞬間に動くようにします
   issues:
     types: [opened, edited]
 
 jobs:
-  debug-job:
+  check-auth:
     runs-on: ubuntu-latest
     steps:
-      # 1. 認証 (ここで失敗する場合は Secret の中身が原因)
+      # 1. Google Cloud 認証
       - name: Auth Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
 
-      # 2. 抽出テスト (ここで失敗する場合は Issue 本文の書き方が原因)
-      - name: Extract and Check
-        env:
-          ISSUE_BODY: ${{ github.event.issue.body }}
+      # 2. トークンが発行できるかテスト
+      - name: Check Access Token
         run: |
-          echo "=== 1. トークン取得チェック ==="
           TOKEN=$(gcloud auth print-access-token)
           if [ -n "$TOKEN" ]; then
-            echo "✅ 認証成功：トークンが発行されました"
+            echo "✅ 認証成功！トークンが発行されました。"
+            # セキュリティ上、トークンの全文字は表示されませんが、
+            # 履歴で「Success」になればOKです
           else
-            echo "❌ 認証失敗：トークンが取得できません"
+            echo "❌ 認証失敗：トークンが空です。"
             exit 1
-          fi
-
-          echo "=== 2. ID抽出チェック ==="
-          # 本文から spaces/.../threads/... のパターンを探す
-          THREAD_ID=$(echo "$ISSUE_BODY" | grep -o 'spaces/[A-Za-z0-9_-]*/threads/[A-Za-z0-9_-]*' | head -n 1)
-
-          if [ -z "$THREAD_ID" ]; then
-            echo "❌ 抽出失敗：Issueの本文に Thread ID が見つかりません"
-            echo "--- 現在の本文内容 ---"
-            echo "$ISSUE_BODY"
-            exit 1
-          else
-            echo "✅ 抽出成功：$THREAD_ID"
-            
-            # スペースIDの切り出しテスト
-            SPACE_ID=$(echo "$THREAD_ID" | cut -d'/' -f1,2)
-            echo "➡️ 解析された Space ID: $SPACE_ID"
           fi
