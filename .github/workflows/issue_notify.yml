@@ -3,6 +3,8 @@ name: Google Chat Notification
 on:
   issues:
     types: [opened, edited, reopened]
+  push:
+    branches: [ "main" ]
 
 jobs:
   notify:
@@ -10,19 +12,20 @@ jobs:
     steps:
       - name: Send Notification via curl
         env:
-          # GitHubのSettings > Secrets > Actions に登録したURL
+          # セキュリティのためURLはSecretsに登録することを強く推奨します
+          # 登録名: GOOGLE_CHAT_WEBHOOK
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # メッセージ本文を構築
-          # ※ヒアドキュメント(EOF)を使うことで、改行や変数を安全に扱えます
+          # 通知内容の構築
+          # ヒアドキュメント(EOF)を使うことで、改行や変数を安全にJSONへ変換できます
           JSON_DATA=$(cat <<EOF
           {
-            "text": "📋 *Issueが更新されました*\n\n**アクション:** ${{ github.event.action }}\n**タイトル:** ${{ github.event.issue.title }}\n**実行者:** ${{ github.actor }}\n**URL:** ${{ github.event.issue.html_url }}"
+            "text": "📋 *GitHubリポジトリ更新通知*\n\n**イベント:** ${{ github.event_name }}\n**実行者:** ${{ github.actor }}\n**URL:** ${{ github.event.issue.html_url || github.event.compare }}"
           }
           EOF
           )
 
-          # Google Chatへ送信
+          # Google ChatへPOST送信
           curl -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "$WEBHOOK_URL"
