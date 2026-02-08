@@ -1,19 +1,37 @@
-name: Google Chat Thread Notification
+name: Notify Google Chat on Issue Update
 
 on:
   issues:
-    types: [opened, edited]
-  issue_comment:
-    types: [created]
+    types: [opened, edited, reopened] # 通知したいアクションを選択
 
 jobs:
-  notify-to-gas:
+  notify-chat:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Event Data to GAS
+      - name: Send Notification to Google Chat
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
+
+      - name: Post to Google Chat
         run: |
-          # secrets.GAS_WEB_APP_URL には、GASで発行された /exec で終わるURLを登録してください
-          # URL全体をダブルクォーテーションで囲むことで、image_a78751.png で発生していたエラーを回避します
-          curl -L -X POST "${{ secrets.GAS_WEB_APP_URL }}" \
-          -H "Content-Type: application/json" \
-          -d '${{ toJson(github.event) }}'
+          # Issueの本文からスレッドIDを抽出（前のロジックと同様）
+          ISSUE_BODY="${{ github.event.issue.body }}"
+          THREAD_ID=$(echo "$ISSUE_BODY" | grep -oP 'Thread ID:\s*\K(spaces/[A-Za-z0-9_-]+/threads/[A-Za-z0-9_-]+)')
+
+          if [ -z "$THREAD_ID" ]; then
+            echo "Thread ID not found in issue body. Skipping notification."
+            exit 0
+          fi
+
+          SPACE_ID=$(echo "$THREAD_ID" | cut -d'/' -f1,2)
+
+          # Google Chat APIを直接叩く
+          curl -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            "https://chat.googleapis.com/v1/$SPACE_ID/messages?messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD" \
+            -d "{
+              \"text\": \"🔔 **GitHub Issue更新通知**\nタイトル: ${{ github.event.issue.title }}\nURL: ${{ github.event.issue.html_url }}\",
+              \"thread\": { \"name\": \"$THREAD_ID\" }
+            }"
