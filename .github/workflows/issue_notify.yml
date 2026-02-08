@@ -13,17 +13,20 @@ jobs:
         uses: SimonScholz/google-chat-action@main
         with:
           webhookUrl: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-          # 複雑なカード形式をすべてオフにします
+          # 不要なリポジトリ情報を消す
           createDefaultSection: false
-          # シンプルなテキストとして送信（ここがエラー回避の鍵です）
-          text: |
-            📋 **Issue更新: ${{ github.event.issue.title }}**
-
-            👤 **実行者**
-            ${{ github.actor }} (${{ github.event.action }})
-
-            📝 **内容**
-            ${{ github.event.issue.body || github.event.comment.body }}
-
-            🔗 **URL**
-            ${{ github.event.issue.html_url }}
+          # タイトルを設定
+          title: "📋 Issue更新: ${{ github.event.issue.title }}"
+          # 【重要】additionalSections でウィジェットとして改行を強制する
+          additionalSections: |
+            [
+              {
+                "widgets": [
+                  {
+                    "textParagraph": {
+                      "text": "👤 <b>実行者</b><br>${{ github.actor }} (${{ github.event.action }})<br><br>📝 <b>内容</b><br>${{ github.event.issue.body || github.event.comment.body }}<br><br>🔗 <b>URL</b><br><a href='${{ github.event.issue.html_url }}'>Issueを開く</a>"
+                    }
+                  }
+                ]
+              }
+            ]
