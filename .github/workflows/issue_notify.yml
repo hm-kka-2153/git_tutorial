@@ -2,7 +2,8 @@ name: Google Chat Japanese Card Notification
 
 on:
   issues:
-    types: [opened, edited, reopened]
+    # closed を追加しました
+    types: [opened, edited, reopened, closed]
   issue_comment:
     types: [created]
 
@@ -14,37 +15,43 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 1. 変数の定義
+          # 1. 基本情報の取得
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           ISSUE_TITLE="${{ github.event.issue.title }}"
           SENDER="${{ github.actor }}"
           
-          # アクション名の日本語変換
+          # アクション名の日本語変換（クローズを追加）
           case "${{ github.event.action }}" in
-            "opened")   ACTION_JP="新規作成" ;;
-            "edited")   ACTION_JP="編集" ;;
-            "reopened") ACTION_JP="再オープン" ;;
-            "created")  ACTION_JP="コメント投稿" ;;
+            "opened")   ACTION_JP="新規課題が登録されました" ;;
+            "edited")   ACTION_JP="課題が更新されました" ;;
+            "reopened") ACTION_JP="課題が再オープンされました" ;;
+            "closed")   ACTION_JP="課題が解決（クローズ）されました" ;;
+            "created")  ACTION_JP="コメントが追加されました" ;;
             *)          ACTION_JP="${{ github.event.action }}" ;;
           esac
 
-          # イベントごとの設定
+          # イベントごとのアイコン設定（クローズ時はチェックマークに変更）
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            HEADER_TITLE="Issue #${ISSUE_NUMBER}: コメントが追加されました"
+            HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
             CONTENT="${{ github.event.comment.body }}"
             URL="${{ github.event.comment.html_url }}"
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
+          elif [ "${{ github.event.action }}" = "closed" ]; then
+            HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
+            CONTENT="${{ github.event.issue.body }}"
+            URL="${{ github.event.issue.html_url }}"
+            ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/check_circle/default/48px.svg"
           else
-            HEADER_TITLE="Issue #${ISSUE_NUMBER}: ${ACTION_JP}"
+            HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
             CONTENT="${{ github.event.issue.body }}"
             URL="${{ github.event.issue.html_url }}"
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
           fi
 
-          # 2. JSONの構築 (改行やダブルクォートをエスケープ)
-          # 本文が長い場合に備えて先頭5行のみ抽出
-          SUMMARY=$(echo "$CONTENT" | head -n 5 | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
+          # 2. 本文の整形（jqで安全にエスケープ）
+          SUMMARY=$(echo "$CONTENT" | head -n 5 | jq -aRs .)
 
+          # 3. JSONデータの作成
           JSON_DATA=$(cat <<EOF
           {
             "cardsV2": [{
@@ -77,7 +84,7 @@ jobs:
           EOF
           )
 
-          # 3. 送信
+          # 4. WebhookへPOST送信
           curl -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
