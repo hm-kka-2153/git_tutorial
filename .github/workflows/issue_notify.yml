@@ -14,7 +14,8 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 1. データの安全な取得（環境変数経由で渡すのが定石です）
+          # 1. データの安全な取得
+          # ヒアドキュメントを使用して特殊文字によるエラーを防止
           RAW_BODY=$(cat << 'EOF'
           ${{ github.event.issue.body || github.event.comment.body }}
           EOF
@@ -25,19 +26,18 @@ jobs:
           )
           
           ISSUE_NUMBER="${{ github.event.issue.number }}"
-          ACTOR="${{ github.actor }}"
           
-          # 【抽出】「投稿者:」の行から名前を抜き出す
+          # 【抽出】本文から「投稿者:」の行を特定し、名前のみを抽出
           EXTRACTED_SENDER=$(echo "$RAW_BODY" | grep "投稿者:" | head -n 1 | sed 's/.*投稿者[:：]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/\*\*//g')
 
-          # 名前が見つからない場合はGitHubユーザー名を表示
+          # 投稿者名が見つからない場合は GitHub のユーザー名を表示
           if [ -z "$EXTRACTED_SENDER" ]; then
             SENDER="${{ github.event.sender.login }}"
           else
             SENDER="$EXTRACTED_SENDER"
           fi
           
-          # 日本語ステータスの決定
+          # アクションの日本語化
           case "${{ github.event.action }}" in
             "opened")   ACTION_JP="新規課題が登録されました" ;;
             "edited")   ACTION_JP="課題が更新されました" ;;
@@ -47,7 +47,7 @@ jobs:
             *)          ACTION_JP="${{ github.event.action }}" ;;
           esac
 
-          # アイコンとヘッダーの設定
+          # ヘッダーとアイコンの設定
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
             HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
@@ -58,15 +58,15 @@ jobs:
             URL="${{ github.event.issue.html_url }}"
           fi
 
-          # 2. 本文の整形（投稿者行を除外し、JSON用に安全にエンコード）
-          # jq の --arg を使うことで、特殊文字によるJSON破綻を完全に防ぎます
+          # 2. 本文の整形（投稿者行を除外し、最大10行まで抽出）
           SUMMARY=$(echo "$RAW_BODY" | grep -v "投稿者:" | head -n 10)
 
-          # 3. JSONの組み立て（jqを使用して構築するのが最も確実です）
+          # 3. JSONの組み立て (jqを使用して安全に生成)
+          # subtitle から "実行者: $ACTOR" を削除し、"投稿者: $SENDER" だけにしました
           JSON_DATA=$(jq -n \
             --arg title "$ISSUE_TITLE" \
             --arg header "$HEADER_TITLE" \
-            --arg subtitle "投稿者: $SENDER / 実行者: $ACTOR" \
+            --arg subtitle "投稿者: $SENDER" \
             --arg icon "$ICON" \
             --arg summary "$SUMMARY" \
             --arg url "$URL" \
@@ -79,7 +79,7 @@ jobs:
                   sections: [{
                     widgets: [
                       { textParagraph: { text: ("<b>タイトル:</b><br>" + $title) } },
-                      { textParagraph: { text: ("<b>内容:</b><br>" + $summary) } },
+                      { textParagraph: { "text": ("<b>内容:</b><br>" + $summary) } },
                       { buttonList: { buttons: [{ text: "GitHubで詳細を見る", onClick: { openLink: { url: $url } } }] } }
                     ]
                   }]
@@ -88,7 +88,7 @@ jobs:
               thread: { threadKey: $tkey }
             }')
 
-          # 4. 送信（エラー時に内容を確認できるよう -v を付与）
-          curl -v -X POST -H 'Content-Type: application/json' \
+          # 4. 送信
+          curl -s -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
