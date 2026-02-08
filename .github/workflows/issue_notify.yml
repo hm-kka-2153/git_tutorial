@@ -19,14 +19,13 @@ jobs:
           ISSUE_TITLE="${{ github.event.issue.title }}"
           ACTOR="${{ github.actor }}"
           
-          # 【ロジック追加】本文(body)から「投稿者:」の後の名前を抽出
-          # 1. 本文から "投稿者:" を含む行を探す
-          # 2. "投稿者:" 以降の文字列を取り出す
-          # 3. 前後の空白や不要な記号(※)を削除
+          # 本文(body)の取得
           RAW_BODY="${{ github.event.issue.body }}"
+
+          # 【抽出】本文から「投稿者:」の後の名前を抽出
           EXTRACTED_SENDER=$(echo "$RAW_BODY" | grep "投稿者:" | head -n 1 | sed 's/.*投稿者[:：]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/\*\*//g')
 
-          # もし本文から抽出できなかった場合は、GitHubのユーザー名(login)をフォールバックとして使用
+          # 抽出できなかった場合のフォールバック
           if [ -z "$EXTRACTED_SENDER" ]; then
             SENDER="${{ github.event.sender.login }}"
           else
@@ -49,16 +48,16 @@ jobs:
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
           else
             HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
-            CONTENT="${{ github.event.issue.body }}"
+            CONTENT="$RAW_BODY"
             URL="${{ github.event.issue.html_url }}"
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
           fi
 
-          # 2. 本文の整形（jqでエスケープ）
-          SUMMARY=$(echo "$CONTENT" | head -n 5 | jq -aRs . | sed 's/^"//;s/"$//')
+          # 2. 本文の整形
+          # 【修正箇所】 grep -v "投稿者:" を追加し、本文からその行を除外します
+          SUMMARY=$(echo "$CONTENT" | grep -v "投稿者:" | head -n 5 | jq -aRs . | sed 's/^"//;s/"$//')
 
           # 3. JSONデータの構築
-          # subtitleに抽出した $SENDER を表示
           JSON_DATA=$(cat <<EOF
           {
             "cardsV2": [{
@@ -92,6 +91,4 @@ jobs:
           )
 
           # 4. 送信
-          curl -s -X POST -H 'Content-Type: application/json' \
-          -d "$JSON_DATA" \
-          "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
+          curl -s -X POST -H 'Content-Type: application/json
