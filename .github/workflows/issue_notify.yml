@@ -1,31 +1,31 @@
-name: Issue Notification
+name: Google Chat Notify
 on:
   issues:
-    types: [opened, edited]
-  issue_comment:
-    types: [created]
+    types: [opened, edited] # 作成と編集の両方に反応
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Google Chat Notification
+      - name: Auth Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
+
+      - name: Send Message
         run: |
-          # 1. Issueの本文からThread ID（spaces/X/threads/Y）を抽出
-          # GASで埋め込んだ「**Thread ID:** spaces/AAA/threads/BBB」の形式からIDを抜き出します
-          THREAD_ID=$(echo "${{ github.event.issue.body }}" | grep -o 'spaces/[^ ]*/threads/[^ ]*' | head -1)
-
-          # 2. 通知内容の準備（コメントがある場合はコメント、ない場合はIssue本文）
-          CONTENT="${{ github.event.comment.body || github.event.issue.body }}"
+          # スペースIDはご自身のものに書き換えてください
+          SPACE_ID="spaces/AAQASOkPwoA"
           
-          # JSONのエラーを防ぐため、Pythonを使用して本文をエスケープ処理
-          SAFE_CONTENT=$(echo "$CONTENT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
+          # GitHub Actionsが自動で持っている変数を利用
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          ISSUE_URL="${{ github.event.issue.html_url }}"
+          ACTION="${{ github.event.action }}" # opened か edited が入る
 
-          # 3. Google ChatへPOST送信
-          # 修正点: messageReplyOption を message_reply_option (スネークケース) に変更
-          curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}&message_reply_option=REPLY_MESSAGE_FALLBACK" \
-          -H "Content-Type: application/json; charset=UTF-8" \
-          -d "{
-            \"text\": \"📋 *Issue更新: ${{ github.event.issue.title }}*\n\n👤 *実行者*: ${{ github.actor }} (${{ github.event.action }})\n\n📝 *内容*:\n${SAFE_CONTENT:1:-1}\n\n🔗 *URL*: ${{ github.event.comment.html_url || github.event.issue.html_url }}\",
-            \"thread\": { \"threadKey\": \"$THREAD_ID\" }
-          }"
+          curl -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            "https://chat.googleapis.com/v1/$SPACE_ID/messages" \
+            -d "{
+              \"text\": \"📢 **Issue ${{ github.event.action }}**\nタイトル: $ISSUE_TITLE\nURL: $ISSUE_URL\"
+            }"
