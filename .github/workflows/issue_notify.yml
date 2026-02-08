@@ -1,0 +1,22 @@
+name: Issue Notification
+on:
+  issues:
+    types: [opened, edited, closed, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Google Chat Notification
+        uses: funnyzak/google-chat-notification@1.1.0
+        with:
+          url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+          title: '📋 Issueが更新されました'
+          content: |
+            **アクション:** ${{ github.event.action }}
+            **タイトル:** ${{ github.event.issue.title }}
+            **実行者:** ${{ github.actor }}
+            **URL:** ${{ github.event.issue.html_url }}
+          color: "#4285F4" # Googleっぽい青色
