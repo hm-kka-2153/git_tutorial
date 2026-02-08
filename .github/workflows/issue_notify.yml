@@ -1,39 +1,76 @@
-name: Google Chat Threaded Notification
+name: Google Chat Rich Notification
 
 on:
   issues:
-    # opened: 新規作成, edited: タイトルや本文の編集
     types: [opened, edited, reopened]
   issue_comment:
-    # コメントが作成された時
     types: [created]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Notification
+      - name: Send Rich Card Notification
         env:
-          # 必ず Settings > Secrets > Actions に GOOGLE_CHAT_WEBHOOK を登録してください
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 1. threadKeyの決定 (Issue番号をベースにする)
-          # issue_commentイベントの場合は github.event.issue.number を参照
+          # 1. 共通変数の設定
           ISSUE_NUMBER="${{ github.event.issue.number }}"
-          THREAD_KEY="issue-${ISSUE_NUMBER}"
-
-          # 2. メッセージ本文の作成
-          # Issue作成/編集か、コメント投稿かで文言を変える例
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          SENDER="${{ github.actor }}"
+          
+          # イベントの種類によってアイコンとタイトルを切り替え
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            TEXT="💬 *新規Issueが登録されました*\n**Issue:** #${ISSUE_NUMBER} ${{ github.event.issue.title }}\n**コメント:** ${{ github.event.comment.body }}\n**URL:** ${{ github.event.comment.html_url }}"
+            CARD_TITLE="Comment Added to #$ISSUE_NUMBER"
+            SUBTITLE="New comment from $SENDER"
+            IMAGE_URL="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
+            CONTENT="${{ github.event.comment.body }}"
+            URL="${{ github.event.comment.html_url }}"
           else
-            TEXT="📋 *Issueが更新されました (${{ github.event.action }})*\n**タイトル:** ${{ github.event.issue.title }}\n**URL:** ${{ github.event.issue.html_url }}"
+            CARD_TITLE="Issue ${{ github.event.action }}: #$ISSUE_NUMBER"
+            SUBTITLE="Modified by $SENDER"
+            IMAGE_URL="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
+            CONTENT="${{ github.event.issue.body }}"
+            URL="${{ github.event.issue.html_url }}"
           fi
 
-          # 3. 送信 (URLパラメータを引用符で囲むのがコツ)
+          # 2. カード形式のJSON構築 (2000文字制限対策でbodyを切り詰め)
+          BODY_TEXT=$(echo "$CONTENT" | head -n 5 | sed 's/"/\\"/g')
+          
+          JSON_DATA=$(cat <<EOF
+          {
+            "cardsV2": [{
+              "cardId": "issue-card",
+              "card": {
+                "header": {
+                  "title": "$CARD_TITLE",
+                  "subtitle": "$SUBTITLE",
+                  "imageUrl": "$IMAGE_URL",
+                  "imageType": "CIRCLE"
+                },
+                "sections": [{
+                  "header": "Detail",
+                  "widgets": [
+                    { "textParagraph": { "text": "<b>Title:</b> $ISSUE_TITLE" } },
+                    { "textParagraph": { "text": "<b>Summary:</b><br>$BODY_TEXT" } },
+                    {
+                      "buttonList": {
+                        "buttons": [{
+                          "text": "View on GitHub",
+                          "onClick": { "openLink": { "url": "$URL" } }
+                        }]
+                      }
+                    }
+                  ]
+                }]
+              }
+            }],
+            "thread": { "threadKey": "issue-$ISSUE_NUMBER" }
+          }
+          EOF
+          )
+
+          # 3. 送信
           curl -X POST -H 'Content-Type: application/json' \
-          -d "{
-            \"text\": \"$TEXT\",
-            \"thread\": { \"threadKey\": \"$THREAD_KEY\" }
-          }" \
+          -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
