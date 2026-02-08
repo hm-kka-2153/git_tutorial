@@ -6,9 +6,3 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    steps:
-      - name: Auth Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
-
