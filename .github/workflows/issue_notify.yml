@@ -10,13 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Google Chat Notification
-        uses: funnyzak/google-chat-notification@1.1.0
+        # 安定性の高い SimonScholz 版に変更しました
+        uses: SimonScholz/google-chat-action@v1.5.1
         with:
-          url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-          title: '📋 Issueが更新されました'
-          content: |
-            **アクション:** ${{ github.event.action }}
-            **タイトル:** ${{ github.event.issue.title }}
-            **実行者:** ${{ github.actor }}
-            **URL:** ${{ github.event.issue.html_url }}
-          color: "#4285F4" # Googleっぽい青色
+          webhookUrl: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+          # 通知されるメッセージの内容
+          message: |
+            📋 **Issue更新通知**
+            アクション: ${{ github.event.action }}
+            タイトル: ${{ github.event.issue.title }}
+            実行者: ${{ github.actor }}
+            URL: ${{ github.event.issue.html_url }}
