@@ -10,16 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Google Chat Notification
-        uses: SimonScholz/google-chat-action@main
-        with:
-          webhookUrl: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-          # エラーの元になる additionalSections は使わず、subtitle に情報を集約します
-          title: "📋 Issue更新: ${{ github.event.issue.title }}"
-          # subtitle内では改行コードをエスケープ処理せず、パイプ記号（|）でそのまま流し込みます
-          subtitle: |
-            👤 実行者: ${{ github.actor }} (${{ github.event.action }})
-            
-            📝 内容:
-            ${{ github.event.issue.body || github.event.comment.body }}
-            
-            🔗 URL: ${{ github.event.issue.html_url }}
+        # ツールを使わず、直接Google ChatのWebhookを叩くもっともシンプルな方法に変えます
+        run: |
+          curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}" \
+          -H "Content-Type: application/json; charset=UTF-8" \
+          -d '{
+            "text": "📋 *Issue更新: ${{ github.event.issue.title }}*\n\n👤 *実行者*: ${{ github.actor }} (${{ github.event.action }})\n\n📝 *内容*:\n${{ github.event.issue.body || github.event.comment.body }}\n\n🔗 *URL*: ${{ github.event.issue.html_url }}"
+          }'
