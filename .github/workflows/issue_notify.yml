@@ -12,18 +12,18 @@ jobs:
       - name: Send Google Chat Notification
         run: |
           # 1. Issueの本文からThread ID（spaces/X/threads/Y）を抽出
-          # grepでIDのパターンに一致する部分を抜き出します
+          # GASで埋め込んだ「**Thread ID:** spaces/AAA/threads/BBB」の形式からIDを抜き出します
           THREAD_ID=$(echo "${{ github.event.issue.body }}" | grep -o 'spaces/[^ ]*/threads/[^ ]*' | head -1)
 
-          # 2. 通知内容の準備（コメントかIssue本文か）
+          # 2. 通知内容の準備（コメントがある場合はコメント、ない場合はIssue本文）
           CONTENT="${{ github.event.comment.body || github.event.issue.body }}"
           
-          # JSONエスケープ処理
+          # JSONのエラーを防ぐため、Pythonを使用して本文をエスケープ処理
           SAFE_CONTENT=$(echo "$CONTENT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
 
           # 3. Google ChatへPOST送信
-          # URLに messageReplyOption=REPLY_MESSAGE_FALLBACK を追加することで、スレッドが見つからない場合も新規投稿として処理されます
-          curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}&messageReplyOption=REPLY_MESSAGE_FALLBACK" \
+          # 修正点: messageReplyOption を message_reply_option (スネークケース) に変更
+          curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}&message_reply_option=REPLY_MESSAGE_FALLBACK" \
           -H "Content-Type: application/json; charset=UTF-8" \
           -d "{
             \"text\": \"📋 *Issue更新: ${{ github.event.issue.title }}*\n\n👤 *実行者*: ${{ github.actor }} (${{ github.event.action }})\n\n📝 *内容*:\n${SAFE_CONTENT:1:-1}\n\n🔗 *URL*: ${{ github.event.comment.html_url || github.event.issue.html_url }}\",
