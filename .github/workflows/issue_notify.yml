@@ -1,31 +1,34 @@
-name: Google Chat Notification
+name: Google Chat Threaded Notification
 
 on:
   issues:
     types: [opened, edited, reopened]
-  push:
-    branches: [ "main" ]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Notification via curl
+      - name: Send Notification with threadKey
         env:
-          # セキュリティのためURLはSecretsに登録することを強く推奨します
-          # 登録名: GOOGLE_CHAT_WEBHOOK
+          # Webhook URLはGitHubのSecretsに登録して使用してください
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 通知内容の構築
-          # ヒアドキュメント(EOF)を使うことで、改行や変数を安全にJSONへ変換できます
+          # 1. URLにスレッド返信用のオプションを付与
+          # 2. threadKeyとしてIssue番号を指定（これでIssueごとにスレッドが固定されます）
+          # 3. messageReplyOptionを指定することで、初回は新規、2回目以降は返信になります
+          
+          FINAL_URL="${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
+          
           JSON_DATA=$(cat <<EOF
           {
-            "text": "📋 *GitHubリポジトリ更新通知*\n\n**イベント:** ${{ github.event_name }}\n**実行者:** ${{ github.actor }}\n**URL:** ${{ github.event.issue.html_url || github.event.compare }}"
+            "text": "📋 *Issue通知*\n**タイトル:** ${{ github.event.issue.title }}\n**ステータス:** ${{ github.event.action }}\n**URL:** ${{ github.event.issue.html_url }}",
+            "thread": {
+              "threadKey": "issue-${{ github.event.issue.number }}"
+            }
           }
           EOF
           )
 
-          # Google ChatへPOST送信
           curl -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
-          "$WEBHOOK_URL"
+          "$FINAL_URL"
