@@ -1,51 +1,28 @@
-name: Google Chat Debug
-
+name: Google Auth Test
 on:
+  push: # ファイルを保存（コミット）した瞬間に動くようにします
   issues:
-    types: [opened, edited]
+    types: [opened]
 
 jobs:
-  debug-notify:
+  check-auth:
     runs-on: ubuntu-latest
     steps:
+      # 1. Google Cloud 認証
       - name: Auth Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
 
-      - name: Debug and Send
-        env:
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_URL: ${{ github.event.issue.html_url }}
+      # 2. トークンが発行できるかテスト
+      - name: Check Access Token
         run: |
-          echo "--- 1. 変数の抽出テスト ---"
-          # Thread IDを抽出して表示
-          THREAD_ID=$(echo "$ISSUE_BODY" | grep -o 'spaces/[A-Za-z0-9_-]*/threads/[A-Za-z0-9_-]*' | head -n 1)
-          echo "抽出された Thread ID: [$THREAD_ID]"
-
-          if [ -z "$THREAD_ID" ]; then
-            echo "❌ エラー: 本文から Thread ID が見つかりませんでした。"
-            echo "本文の内容を確認してください: $ISSUE_BODY"
+          TOKEN=$(gcloud auth print-access-token)
+          if [ -n "$TOKEN" ]; then
+            echo "✅ 認証成功！トークンが発行されました。"
+            # セキュリティ上、トークンの全文字は表示されませんが、
+            # 履歴で「Success」になればOKです
+          else
+            echo "❌ 認証失敗：トークンが空です。"
             exit 1
           fi
-
-          SPACE_ID=$(echo "$THREAD_ID" | cut -d'/' -f1,2)
-          echo "切り出された Space ID: [$SPACE_ID]"
-
-          echo "--- 2. API送信テスト (詳細ログ出力) ---"
-          # curl に -i をつけてヘッダー情報を表示し、APIの生の応答を確認します
-          # 認証トークンを取得
-          TOKEN=$(gcloud auth print-access-token)
-
-          RESPONSE=$(curl -s -i -X POST \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            "https://chat.googleapis.com/v1/$SPACE_ID/messages?messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD" \
-            -d "{
-              \"text\": \"🛠 デバッグ通知\nタイトル: $ISSUE_TITLE\",
-              \"thread\": { \"name\": \"$THREAD_ID\" }
-            }")
-
-          echo "--- 3. APIレスポンス結果 ---"
-          echo "$RESPONSE"
