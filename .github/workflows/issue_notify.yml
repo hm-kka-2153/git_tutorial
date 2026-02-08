@@ -13,14 +13,3 @@ jobs:
         with:
           credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
 
-      # 2. Issueの内容を解析して返信
-      - name: Send Message to Thread
-        run: |
-          # 1. 必要な情報の取得
-          ISSUE_BODY="${{ github.event.issue.body }}"
-          ISSUE_TITLE="${{ github.event.issue.title }}"
-          ISSUE_URL="${{ github.event.issue.html_url }}"
-          ACTION="${{ github.event.action }}"
-
-          # 2. 本文から Thread ID を抽出
-          THREAD_ID=$(echo "$ISSUE_BODY" | grep -oP 'Thread ID:\s*\K(spaces/[A-Za-z0-9_-]+/threads/[A-Za-z0-9_-]+)')
