@@ -1,7 +1,7 @@
 name: Test Notification
 on:
   issues:
-    types: [opened] # 新しくIssueを作った時だけ反応
+    types: [opened, edited, reopened] # 新しくIssueを作った時だけ反応
 
 jobs:
   test-job:
