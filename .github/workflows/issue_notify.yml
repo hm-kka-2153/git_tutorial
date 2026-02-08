@@ -25,7 +25,7 @@ jobs:
           # 2. メッセージ本文の作成
           # Issue作成/編集か、コメント投稿かで文言を変える例
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            TEXT="💬 *Issueにコメントが追加されました*\n**Issue:** #${ISSUE_NUMBER} ${{ github.event.issue.title }}\n**コメント:** ${{ github.event.comment.body }}\n**URL:** ${{ github.event.comment.html_url }}"
+            TEXT="💬 *新規Issueが登録されました*\n**Issue:** #${ISSUE_NUMBER} ${{ github.event.issue.title }}\n**コメント:** ${{ github.event.comment.body }}\n**URL:** ${{ github.event.comment.html_url }}"
           else
             TEXT="📋 *Issueが更新されました (${{ github.event.action }})*\n**タイトル:** ${{ github.event.issue.title }}\n**URL:** ${{ github.event.issue.html_url }}"
           fi
