@@ -1,22 +1,31 @@
-name: Issue Notification
+name: Google Chat Notification
+
 on:
+  # Issueの作成・更新時、およびメインブランチへのPush時に実行
   issues:
-    types: [opened, edited, closed, reopened]
-  issue_comment:
-    types: [created]
+    types: [opened, edited, reopened]
+  push:
+    branches: [ "main" ]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Google Chat Notification
-        uses: akira-k0/google-chat-notification@1.1.0
+      - name: Google Chat Notification
+        uses: akira-k0/google-chat-notification@v1.1.0
         with:
+          # GitHubのSettings > Secrets > Actions に登録した名前
           url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-          title: '📋 Issueが更新されました'
+          
+          # 通知のタイトル
+          title: '📋 GitHubリポジトリが更新されました'
+          
+          # 通知のメインコンテンツ（Markdownが一部使えます）
           content: |
-            **アクション:** ${{ github.event.action }}
-            **タイトル:** ${{ github.event.issue.title }}
+            **イベント:** ${{ github.event_name }}
             **実行者:** ${{ github.actor }}
-            **URL:** ${{ github.event.issue.html_url }}
-          color: "#4285F4" # Googleっぽい青色
+            **リポジトリ:** ${{ github.repository }}
+            **詳細URL:** ${{ github.event.issue.html_url || github.event.compare }}
+          
+          # ジョブの成否に応じて色を変える設定
+          status: ${{ job.status }}
