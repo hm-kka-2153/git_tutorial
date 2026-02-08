@@ -45,12 +45,11 @@ jobs:
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
           fi
 
-          # 2. 本文の整形（重要：jqの出力を文字列として安全に扱う）
-          # sed で外側のダブルクォートを削除しています
+          # 2. 本文の整形（jqでエスケープしつつ、前後の引用符を削除して埋め込みやすくする）
           SUMMARY=$(echo "$CONTENT" | head -n 5 | jq -aRs . | sed 's/^"//;s/"$//')
 
           # 3. JSONデータの作成
-          # $SUMMARY の周りに直接ダブルクォートを配置します
+          # threadKeyはシステム的に指定しますが、textParagraphには含めないため非表示になります
           JSON_DATA=$(cat <<EOF
           {
             "cardsV2": [{
@@ -84,7 +83,6 @@ jobs:
           )
 
           # 4. WebhookへPOST送信
-          # 結果をコンソールに出力してデバッグしやすくします
           curl -v -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
