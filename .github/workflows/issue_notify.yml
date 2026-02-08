@@ -1,33 +1,22 @@
-name: Show Access Token Debug
+name: Issue Notification
 on:
-  push:
-    branches: [ main ]
   issues:
-    types: [opened, edited]
+    types: [opened, edited, closed, reopened]
+  issue_comment:
+    types: [created]
 
 jobs:
-  display-token:
+  notify:
     runs-on: ubuntu-latest
     steps:
-      # 1. Google Cloud 認証
-      - name: Auth Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Send Google Chat Notification
+        uses: funnyzak/google-chat-notification@1.1.0
         with:
-          credentials_json: ${{ secrets.GOOGLE_CHAT_CREDENTIALS }}
-
-      # 2. トークンを可視化して表示
-      - name: Display Token
-        run: |
-          # トークンを取得
-          RAW_TOKEN=$(gcloud auth print-access-token)
-          
-          echo "=== 通常の表示（おそらく *** になります） ==="
-          echo "Token: $RAW_TOKEN"
-          
-          echo ""
-          echo "=== デバッグ用：1文字ずつ分解して表示（伏せ字回避） ==="
-          # sedを使って各文字の間にスペースを入れ、GitHubの検閲を回避します
-          echo "$RAW_TOKEN" | sed 's/./& /g'
-          
-          echo ""
-          echo "=== この 'ya29...' から始まる文字列をコピーして、PCのテストに使ってください ==="
+          url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+          title: '📋 Issueが更新されました'
+          content: |
+            **アクション:** ${{ github.event.action }}
+            **タイトル:** ${{ github.event.issue.title }}
+            **実行者:** ${{ github.actor }}
+            **URL:** ${{ github.event.issue.html_url }}
+          color: "#4285F4" # Googleっぽい青色
