@@ -1,4 +1,5 @@
-name: Issue Notification
+name: Google Chat Thread Notification
+
 on:
   issues:
     types: [opened, edited]
@@ -6,25 +7,13 @@ on:
     types: [created]
 
 jobs:
-  notify:
+  notify-to-gas:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Google Chat Notification
+      - name: Send Event Data to GAS
         run: |
-          # 1. Issueの本文からフルパスを抽出し、さらに最後の「ID部分」だけを抜き出す
-          # 例: spaces/AAA/threads/BBB -> BBB だけを取得
-          FULL_PATH=$(echo "${{ github.event.issue.body }}" | grep -o 'spaces/[^ ]*/threads/[^ ]*' | head -1)
-          THREAD_ID=${FULL_PATH##*/}
-
-          # 2. 通知内容の準備
-          CONTENT="${{ github.event.comment.body || github.event.issue.body }}"
-          SAFE_CONTENT=$(echo "$CONTENT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
-
-          # 3. Google ChatへPOST送信
-          # 【重要】URLパラメータに「抜き出したID」を threadKey として渡します
-          # これにより、Google Chatは既存のスレッドを正しく特定します
-          curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}&threadKey=${THREAD_ID}&message_reply_option=REPLY_MESSAGE_FALLBACK" \
-          -H "Content-Type: application/json; charset=UTF-8" \
-          -d "{
-            \"text\": \"📋 *Issue更新: ${{ github.event.issue.title }}*\n\n👤 *実行者*: ${{ github.actor }}\n📝 *内容*:\n${SAFE_CONTENT:1:-1}\n\n🔗 *URL*: ${{ github.event.comment.html_url || github.event.issue.html_url }}\"
-          }"
+          # secrets.GAS_WEB_APP_URL には、GASで発行された /exec で終わるURLを登録してください
+          # URL全体をダブルクォーテーションで囲むことで、image_a78751.png で発生していたエラーを回避します
+          curl -L -X POST "${{ secrets.GAS_WEB_APP_URL }}" \
+          -H "Content-Type: application/json" \
+          -d '${{ toJson(github.event) }}'
