@@ -24,21 +24,3 @@ jobs:
 
           # 2. 本文から Thread ID を抽出
           THREAD_ID=$(echo "$ISSUE_BODY" | grep -oP 'Thread ID:\s*\K(spaces/[A-Za-z0-9_-]+/threads/[A-Za-z0-9_-]+)')
-
-          if [ -z "$THREAD_ID" ]; then
-            echo "❌ 本文に Thread ID が見つかりません。通知をスキップします。"
-            exit 0
-          fi
-
-          # 3. スペースIDを切り出し (spaces/XXXXX)
-          SPACE_ID=$(echo "$THREAD_ID" | cut -d'/' -f1,2)
-
-          # 4. Google Chat API へ POST
-          curl -X POST \
-            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-            -H "Content-Type: application/json" \
-            "https://chat.googleapis.com/v1/$SPACE_ID/messages?messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD" \
-            -d "{
-              \"text\": \"🔄 **GitHub Issue $ACTION**\nタイトル: $ISSUE_TITLE\nURL: $ISSUE_URL\",
-              \"thread\": { \"name\": \"$THREAD_ID\" }
-            }"
