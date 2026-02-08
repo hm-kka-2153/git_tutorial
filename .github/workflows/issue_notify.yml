@@ -1,4 +1,4 @@
-name: Google Chat Rich Notification
+name: Google Chat Japanese Card Notification
 
 on:
   issues:
@@ -10,53 +10,60 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Rich Card Notification
+      - name: Send Japanese Card Notification
         env:
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 1. 共通変数の設定
+          # 1. 変数の定義
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           ISSUE_TITLE="${{ github.event.issue.title }}"
           SENDER="${{ github.actor }}"
           
-          # イベントの種類によってアイコンとタイトルを切り替え
+          # アクション名の日本語変換
+          case "${{ github.event.action }}" in
+            "opened")   ACTION_JP="新規作成" ;;
+            "edited")   ACTION_JP="編集" ;;
+            "reopened") ACTION_JP="再オープン" ;;
+            "created")  ACTION_JP="コメント投稿" ;;
+            *)          ACTION_JP="${{ github.event.action }}" ;;
+          esac
+
+          # イベントごとの設定
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            CARD_TITLE="Comment Added to #$ISSUE_NUMBER"
-            SUBTITLE="New comment from $SENDER"
-            IMAGE_URL="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
+            HEADER_TITLE="Issue #${ISSUE_NUMBER}: コメントが追加されました"
             CONTENT="${{ github.event.comment.body }}"
             URL="${{ github.event.comment.html_url }}"
+            ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
           else
-            CARD_TITLE="Issue ${{ github.event.action }}: #$ISSUE_NUMBER"
-            SUBTITLE="Modified by $SENDER"
-            IMAGE_URL="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
+            HEADER_TITLE="Issue #${ISSUE_NUMBER}: ${ACTION_JP}"
             CONTENT="${{ github.event.issue.body }}"
             URL="${{ github.event.issue.html_url }}"
+            ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
           fi
 
-          # 2. カード形式のJSON構築 (2000文字制限対策でbodyを切り詰め)
-          BODY_TEXT=$(echo "$CONTENT" | head -n 5 | sed 's/"/\\"/g')
-          
+          # 2. JSONの構築 (改行やダブルクォートをエスケープ)
+          # 本文が長い場合に備えて先頭5行のみ抽出
+          SUMMARY=$(echo "$CONTENT" | head -n 5 | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
+
           JSON_DATA=$(cat <<EOF
           {
             "cardsV2": [{
-              "cardId": "issue-card",
+              "cardId": "issue-card-jp",
               "card": {
                 "header": {
-                  "title": "$CARD_TITLE",
-                  "subtitle": "$SUBTITLE",
-                  "imageUrl": "$IMAGE_URL",
+                  "title": "$HEADER_TITLE",
+                  "subtitle": "実行者: $SENDER",
+                  "imageUrl": "$ICON",
                   "imageType": "CIRCLE"
                 },
                 "sections": [{
-                  "header": "Detail",
                   "widgets": [
-                    { "textParagraph": { "text": "<b>Title:</b> $ISSUE_TITLE" } },
-                    { "textParagraph": { "text": "<b>Summary:</b><br>$BODY_TEXT" } },
+                    { "textParagraph": { "text": "<b>タイトル:</b><br>$ISSUE_TITLE" } },
+                    { "textParagraph": { "text": "<b>内容:</b><br>$SUMMARY" } },
                     {
                       "buttonList": {
                         "buttons": [{
-                          "text": "View on GitHub",
+                          "text": "GitHubで詳細を見る",
                           "onClick": { "openLink": { "url": "$URL" } }
                         }]
                       }
