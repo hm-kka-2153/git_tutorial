@@ -13,17 +13,17 @@ jobs:
         uses: SimonScholz/google-chat-action@main
         with:
           webhookUrl: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-          # 共通の情報を非表示にし、独自のレイアウトを組みます
+          # 複雑なカード形式をすべてオフにします
           createDefaultSection: false
-          title: "📋 Issue更新: ${{ github.event.issue.title }}"
-          # セクション（情報の箱）を分けることで、強制的に縦並びにします
-          additionalSections: |
-            [
-              {
-                "widgets": [
-                  { "decoratedText": { "topLabel": "👤 実行者", "text": "${{ github.actor }} (${{ github.event.action }})" } },
-                  { "decoratedText": { "topLabel": "📝 内容", "text": "${{ github.event.issue.body || github.event.comment.body }}" } },
-                  { "decoratedText": { "topLabel": "🔗 URL", "text": "<a href='${{ github.event.issue.html_url }}'>リンクを開く</a>" } }
-                ]
-              }
-            ]
+          # シンプルなテキストとして送信（ここがエラー回避の鍵です）
+          text: |
+            📋 **Issue更新: ${{ github.event.issue.title }}**
+
+            👤 **実行者**
+            ${{ github.actor }} (${{ github.event.action }})
+
+            📝 **内容**
+            ${{ github.event.issue.body || github.event.comment.body }}
+
+            🔗 **URL**
+            ${{ github.event.issue.html_url }}
