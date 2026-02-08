@@ -14,10 +14,11 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 1. 基本情報の取得
+          # 1. データの取得
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           ISSUE_TITLE="${{ github.event.issue.title }}"
-          SENDER="${{ github.actor }}"
+          ACTOR="${{ github.actor }}"
+          SENDER="${{ github.event.sender.login }}"
           
           case "${{ github.event.action }}" in
             "opened")   ACTION_JP="新規課題が登録されました" ;;
@@ -45,11 +46,12 @@ jobs:
             ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
           fi
 
-          # 2. 本文の整形（jqでエスケープ）
+          # 2. 本文の整形
           SUMMARY=$(echo "$CONTENT" | head -n 5 | jq -aRs . | sed 's/^"//;s/"$//')
 
           # 3. JSONデータの構築
-          # ※ ここに "**threadKey:**" などの文字列が入っていないことを確認してください
+          # 【重要】"text" フィールドを絶対に含めないようにします。
+          # これにより、システム用の threadKey は裏側だけで使われ、画面には出なくなります。
           JSON_DATA=$(cat <<EOF
           {
             "cardsV2": [{
@@ -57,7 +59,7 @@ jobs:
               "card": {
                 "header": {
                   "title": "$HEADER_TITLE",
-                  "subtitle": "実行者: $SENDER",
+                  "subtitle": "投稿者: $SENDER / 実行者: $ACTOR",
                   "imageUrl": "$ICON",
                   "imageType": "CIRCLE"
                 },
@@ -82,7 +84,7 @@ jobs:
           EOF
           )
 
-          # 4. 送信（標準出力に余計なものを出さないよう curl のみ実行）
+          # 4. 送信 (URLパラメータに余計なものが混ざらないよう注意)
           curl -s -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
