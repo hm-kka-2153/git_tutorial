@@ -1,85 +1,66 @@
-name: Google Chat Japanese Card Notification
-
-on:
-  issues:
-    types: [opened, edited, reopened, closed]
-  issue_comment:
-    types: [created]
-
-jobs:
-  notify:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send Japanese Card Notification
+- name: Send Japanese Card Notification
         env:
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
-          # 1. データの安全な取得
-          # ヒアドキュメントを使用して特殊文字によるエラーを防止
-          RAW_BODY=$(cat << 'EOF'
-          ${{ github.event.issue.body || github.event.comment.body }}
-          EOF
-          )
+          # 1. データの取得
+          # issue_comment イベントでも issue オブジェクトは参照可能です
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
           ISSUE_TITLE=$(cat << 'EOF'
           ${{ github.event.issue.title }}
           EOF
           )
           
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          
-          # 【抽出】本文から「投稿者:」の行を特定し、名前のみを抽出
-          EXTRACTED_SENDER=$(echo "$RAW_BODY" | grep "投稿者:" | head -n 1 | sed 's/.*投稿者[:：]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/\*\*//g')
+          # スレッドIDを "issue-番号" で固定（常にこれを見に行く）
+          TKEY="issue-$ISSUE_NUMBER"
 
-          # 投稿者名が見つからない場合は GitHub のユーザー名を表示
-          if [ -z "$EXTRACTED_SENDER" ]; then
-            SENDER="${{ github.event.sender.login }}"
-          else
-            SENDER="$EXTRACTED_SENDER"
-          fi
-          
-          # アクションの日本語化
-          case "${{ github.event.action }}" in
-            "opened")   ACTION_JP="新規課題が登録されました" ;;
-            "edited")   ACTION_JP="課題が更新されました" ;;
-            "reopened") ACTION_JP="課題が再オープンされました" ;;
-            "closed")   ACTION_JP="課題が解決（クローズ）されました" ;;
-            "created")  ACTION_JP="コメントが追加されました" ;;
-            *)          ACTION_JP="${{ github.event.action }}" ;;
-          esac
-
-          # ヘッダーとアイコンの設定
+          # 2. 本文（内容）の取得
+          # 新規登録(opened)や編集(edited)時はIssue本文、コメント時はコメント本文を取得
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
-            ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/chat_bubble/default/48px.svg"
+            RAW_BODY=$(cat << 'EOF'
+            ${{ github.event.comment.body }}
+            EOF
+            )
+            ACTION_JP="ギルドマスターから伝言です"
             URL="${{ github.event.comment.html_url }}"
           else
-            HEADER_TITLE="Issue #${ISSUE_NUMBER}: $ACTION_JP"
-            ICON="https://fonts.gstatic.com/s/i/short-term/release/googlestandardsymbols/assignment/default/48px.svg"
+            RAW_BODY=$(cat << 'EOF'
+            ${{ github.event.issue.body }}
+            EOF
+            )
             URL="${{ github.event.issue.html_url }}"
+            
+            case "${{ github.event.action }}" in
+              "opened")   ACTION_JP="新規課題を受理しました" ;;
+              "edited")   ACTION_JP="内容が更新されました" ;;
+              "closed")   ACTION_JP="ギルドマスターが完了としました" ;;
+              "reopened") ACTION_JP="課題が再開されました" ;;
+              *)          ACTION_JP="${{ github.event.action }}" ;;
+            esac
           fi
 
-          # 2. 本文の整形（投稿者行を除外し、最大10行まで抽出）
-          SUMMARY=$(echo "$RAW_BODY" | grep -v "投稿者:" | head -n 10)
+          # 送信者の特定（Issue本文から「投稿者:」を探す。なければ実行者）
+          EXTRACTED_SENDER=$(echo "$RAW_BODY" | grep "投稿者:" | head -n 1 | sed 's/.*投稿者[:：]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/\*\*//g')
+          SENDER="${EXTRACTED_SENDER:-${{ github.event.sender.login }}}"
 
-          # 3. JSONの組み立て (jqを使用して安全に生成)
-          # subtitle から "実行者: $ACTOR" を削除し、"投稿者: $SENDER" だけにしました
+          HEADER_TITLE="依頼#${ISSUE_NUMBER}: $ACTION_JP"
+
+          # 3. JSONの組み立て (threadKey に $TKEY を指定)
           JSON_DATA=$(jq -n \
             --arg title "$ISSUE_TITLE" \
             --arg header "$HEADER_TITLE" \
-            --arg subtitle "投稿者: $SENDER" \
-            --arg icon "$ICON" \
-            --arg summary "$SUMMARY" \
+            --arg subtitle "担当: ギルドマスター" \
+            --arg summary "$RAW_BODY" \
             --arg url "$URL" \
-            --arg tkey "issue-$ISSUE_NUMBER" \
+            --arg tkey "$TKEY" \
             '{
               cardsV2: [{
                 cardId: "issue-card",
                 card: {
-                  header: { title: $header, subtitle: $subtitle, imageUrl: $icon, imageType: "CIRCLE" },
+                  header: { title: $header, subtitle: $subtitle, imageType: "CIRCLE" },
                   sections: [{
                     widgets: [
                       { textParagraph: { text: ("<b>タイトル:</b><br>" + $title) } },
-                      { textParagraph: { "text": ("<b>内容:</b><br>" + $summary) } },
+                      { textParagraph: { text: ("<b>内容:</b><br>" + ($summary | @text | .[0:500])) } },
                       { buttonList: { buttons: [{ text: "GitHubで詳細を見る", onClick: { openLink: { url: $url } } }] } }
                     ]
                   }]
@@ -89,6 +70,7 @@ jobs:
             }')
 
           # 4. 送信
+          # messageReplyOption により、同じ threadKey を持つ投稿は既存スレッドに返信される
           curl -s -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
