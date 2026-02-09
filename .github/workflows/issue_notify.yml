@@ -16,26 +16,27 @@ jobs:
         run: |
           # 1. データの取得
           ISSUE_NUMBER="${{ github.event.issue.number }}"
+          
+          # ヒアドキュメントの終了タグ EOF は「行頭」に配置する必要があります
           ISSUE_TITLE=$(cat << 'EOF'
           ${{ github.event.issue.title }}
           EOF
           )
           
-          # スレッドIDを "issue-番号" で固定
           TKEY="issue-$ISSUE_NUMBER"
 
           # 2. 本文（内容）の取得
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
             RAW_BODY=$(cat << 'EOF'
-            ${{ github.event.comment.body }}
-            EOF
+          ${{ github.event.comment.body }}
+          EOF
             )
             ACTION_JP="ギルドマスターから伝言です"
             URL="${{ github.event.comment.html_url }}"
           else
             RAW_BODY=$(cat << 'EOF'
-            ${{ github.event.issue.body }}
-            EOF
+          ${{ github.event.issue.body }}
+          EOF
             )
             URL="${{ github.event.issue.html_url }}"
             
@@ -48,13 +49,14 @@ jobs:
             esac
           fi
 
-          # 投稿者の特定（Issue本文から抽出。なければGitHubユーザー名）
+          # 投稿者の特定
           EXTRACTED_SENDER=$(echo "$RAW_BODY" | grep "投稿者:" | head -n 1 | sed 's/.*投稿者[:：]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/\*\*//g')
           SENDER="${EXTRACTED_SENDER:-${{ github.event.sender.login }}}"
 
           HEADER_TITLE="依頼#${ISSUE_NUMBER}: $ACTION_JP"
 
           # 3. JSONの組み立て
+          # 内容が長すぎる場合に備え、jqで安全に処理
           JSON_DATA=$(jq -n \
             --arg title "$ISSUE_TITLE" \
             --arg header "$HEADER_TITLE" \
