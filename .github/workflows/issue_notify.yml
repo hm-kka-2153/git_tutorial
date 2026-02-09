@@ -1,20 +1,30 @@
-- name: Send Japanese Card Notification
+name: Google Chat Japanese Card Notification
+
+on:
+  issues:
+    types: [opened, edited, reopened, closed]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Japanese Card Notification
         env:
           WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
           # 1. データの取得
-          # issue_comment イベントでも issue オブジェクトは参照可能です
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           ISSUE_TITLE=$(cat << 'EOF'
           ${{ github.event.issue.title }}
           EOF
           )
           
-          # スレッドIDを "issue-番号" で固定（常にこれを見に行く）
+          # スレッドIDを "issue-番号" で固定
           TKEY="issue-$ISSUE_NUMBER"
 
           # 2. 本文（内容）の取得
-          # 新規登録(opened)や編集(edited)時はIssue本文、コメント時はコメント本文を取得
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
             RAW_BODY=$(cat << 'EOF'
             ${{ github.event.comment.body }}
@@ -38,13 +48,13 @@
             esac
           fi
 
-          # 送信者の特定（Issue本文から「投稿者:」を探す。なければ実行者）
+          # 投稿者の特定（Issue本文から抽出。なければGitHubユーザー名）
           EXTRACTED_SENDER=$(echo "$RAW_BODY" | grep "投稿者:" | head -n 1 | sed 's/.*投稿者[:：]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/\*\*//g')
           SENDER="${EXTRACTED_SENDER:-${{ github.event.sender.login }}}"
 
           HEADER_TITLE="依頼#${ISSUE_NUMBER}: $ACTION_JP"
 
-          # 3. JSONの組み立て (threadKey に $TKEY を指定)
+          # 3. JSONの組み立て
           JSON_DATA=$(jq -n \
             --arg title "$ISSUE_TITLE" \
             --arg header "$HEADER_TITLE" \
@@ -70,7 +80,6 @@
             }')
 
           # 4. 送信
-          # messageReplyOption により、同じ threadKey を持つ投稿は既存スレッドに返信される
           curl -s -X POST -H 'Content-Type: application/json' \
           -d "$JSON_DATA" \
           "${WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
